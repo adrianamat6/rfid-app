@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router'; // 👈
 
 export interface SavedConfig {
   id: string;
@@ -13,7 +14,7 @@ export interface SavedConfig {
 @Component({
   selector: 'app-trazabilidad',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   templateUrl: './trazabilidad.html',
   styleUrl: './trazabilidad.css'
 })

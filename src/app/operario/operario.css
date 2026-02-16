@@ -398,3 +398,19 @@
 .empty-historial .empty-icon { font-size: 32px; margin-bottom: 4px; }
 .empty-historial p { font-size: 14px; font-weight: 600; color: #6b7280; }
 .empty-historial span { font-size: 12px; color: #9ca3af; }
+
+
+.btn-back {
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.btn-back:hover { background: rgba(255, 255, 255, 0.2); }

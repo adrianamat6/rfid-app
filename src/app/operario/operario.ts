@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router, RouterLink } from '@angular/router'; // 👈
 
 export interface Escaneo {
   id: string;
@@ -18,11 +19,13 @@ export interface PuntoLinea {
 @Component({
   selector: 'app-operario',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   templateUrl: './operario.html',
   styleUrl: './operario.css'
 })
 export class OperarioComponent implements OnInit, OnDestroy {
+
+  constructor(private router: Router) {} 
 
   // ── LÍNEA CONFIGURADA ──
   puntosLinea: PuntoLinea[] = [];
@@ -160,5 +163,9 @@ export class OperarioComponent implements OnInit, OnDestroy {
 
   trackById(_: number, item: any): string {
     return item.id;
+  }
+
+  volver(): void {
+    this.router.navigate(['/configuracion']);
   }
 }

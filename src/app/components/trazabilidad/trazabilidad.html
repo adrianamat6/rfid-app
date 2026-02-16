@@ -10,15 +10,21 @@
 
 <div class="main">
 
+  <!-- TOPBAR -->
   <div class="topbar">
     <h1>Línea de Trazabilidad</h1>
-    <button class="btn-primary" (click)="clearAll()">
-      <span>↺</span> Limpiar línea
-    </button>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <button class="btn-ghost" (click)="clearAll()">↺ Limpiar</button>
+      <button class="btn-primary" (click)="openSaveModal()" [disabled]="!canSave">
+        💾 Guardar
+      </button>
+      <button class="btn-ghost" routerLink="/operario">📡 Modo Escaneo</button>
+    </div>
   </div>
 
   <div class="content">
 
+    <!-- STATS -->
     <div class="stats-row">
       <div class="stat-card">
         <div class="stat-icon" style="background:#ede9fe;">🔗</div>
@@ -43,12 +49,13 @@
       </div>
     </div>
 
+    <!-- INPUT -->
     <div class="card">
       <div class="card-title">Añadir punto de trazabilidad</div>
       <div class="input-row">
-        <input 
-          class="text-input" 
-          type="text" 
+        <input
+          class="text-input"
+          type="text"
           placeholder="Introduce ubicación a trazar..."
           [(ngModel)]="inputLocation"
           (keydown.enter)="addLocation()"
@@ -60,6 +67,7 @@
       </div>
     </div>
 
+    <!-- PIPELINE -->
     <div class="card">
       <div class="pipeline-header">
         <div class="card-title" style="margin:0">Flujo de trazabilidad</div>
@@ -70,6 +78,7 @@
       </div>
 
       <div class="pipeline">
+
         <div class="empty-state" *ngIf="locations.length === 0">
           <div class="empty-icon">◈</div>
           <p>Sin puntos configurados</p>
@@ -77,7 +86,7 @@
         </div>
 
         <ng-container *ngFor="let loc of locations; let i = index; let last = last">
-          
+
           <div class="node" [style.animation-delay]="(i * 0.04) + 's'">
             <div class="node-header">
               <span class="node-index">P-{{ (i + 1).toString().padStart(2, '0') }}</span>
@@ -103,4 +112,38 @@
     </div>
 
   </div>
+
+  <!-- MODAL -->
+  <div class="modal-overlay" *ngIf="showModal" (click)="closeModal()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <h2>💾 Guardar configuración</h2>
+      <p>Asigna un nombre para identificar esta línea de trazabilidad.</p>
+      <label class="modal-label">Nombre de la configuración</label>
+      <input
+        class="modal-input"
+        type="text"
+        placeholder="Ej: Línea A - Producción 2025"
+        maxlength="60"
+        [(ngModel)]="configNameInput"
+        (keydown.enter)="saveConfig()"
+        (keydown.escape)="closeModal()"
+        autofocus
+      />
+      <div class="modal-actions">
+        <button class="btn-ghost" (click)="closeModal()">Cancelar</button>
+        <button class="btn-primary" (click)="saveConfig()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div
+    class="toast"
+    [class.show]="toastVisible"
+    [class.success]="toastType === 'success'"
+    [class.danger]="toastType === 'danger'"
+  >
+    {{ toastMessage }}
+  </div>
+
 </div>
