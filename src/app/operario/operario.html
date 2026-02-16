@@ -1,0 +1,121 @@
+<!-- FLASH DE CONFIRMACIÓN -->
+<div class="scan-flash" [class.visible]="flashVisible"></div>
+
+<div class="operario-layout">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="logo">⚡</div>
+      <div>
+        <div class="topbar-title">Modo Escaneo</div>
+        <div class="topbar-sub" *ngIf="puntoSeleccionado">
+          📍 {{ puntoSeleccionado.nombre }}
+        </div>
+        <div class="topbar-sub warning" *ngIf="!puntoSeleccionado">
+          ⚠ Sin línea configurada
+        </div>
+      </div>
+    </div>
+    <button class="btn-clear" (click)="limpiarHistorial()">🗑 Borrar</button>
+  </div>
+
+  <!-- STATS BAR -->
+  <div class="stats-bar">
+    <div class="stat-pill">
+      <span class="stat-num">{{ totalEscaneos }}</span>
+      <span class="stat-lbl">Total</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-pill">
+      <span class="stat-num">{{ escaneosPuntoActual }}</span>
+      <span class="stat-lbl">En este punto</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-pill">
+      <span class="stat-num">{{ ultimaHora }}</span>
+      <span class="stat-lbl">Último</span>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- SELECTOR DE PUNTO -->
+    <div class="section">
+      <div class="section-label">Puesto actual</div>
+      <div class="puntos-grid" *ngIf="puntosLinea.length > 0">
+        <button
+          class="punto-btn"
+          *ngFor="let punto of puntosLinea; trackBy: trackById"
+          [class.active]="punto.id === puntoSeleccionado?.id"
+          (click)="seleccionarPunto(punto)"
+        >
+          <span class="punto-idx">{{ punto.nombre.slice(0, 2).toUpperCase() }}</span>
+          <span class="punto-nombre">{{ punto.nombre }}</span>
+        </button>
+      </div>
+      <div class="no-linea" *ngIf="puntosLinea.length === 0">
+        ⚠ No hay ninguna línea configurada. Ve a <strong>Configuración</strong> y guarda una línea primero.
+      </div>
+    </div>
+
+    <!-- ZONA DE ESCANEO -->
+    <div class="scan-zone" [class.ready]="!!puntoSeleccionado" [class.flash]="flashVisible">
+      <div class="scan-icon">{{ flashVisible ? '✓' : '📡' }}</div>
+      <div class="scan-hint">
+        {{ flashVisible ? '¡Registrado!' : (puntoSeleccionado ? 'Apunta y dispara el gatillo' : 'Selecciona un puesto primero') }}
+      </div>
+
+      <!-- Input oculto: la PDA escribe aquí -->
+      <input
+        class="scan-input"
+        type="text"
+        [(ngModel)]="inputScan"
+        (keydown.enter)="registrarEscaneo()"
+        placeholder="Esperando chip RFID..."
+        [disabled]="!puntoSeleccionado"
+        autofocus
+      />
+
+      <div class="scan-value" *ngIf="inputScan">
+        {{ inputScan }}
+      </div>
+    </div>
+
+    <!-- ÚLTIMO ESCANEO DESTACADO -->
+    <div class="ultimo-card" *ngIf="ultimoEscaneo">
+      <div class="ultimo-label">Último escaneo</div>
+      <div class="ultimo-chip">{{ ultimoEscaneo.chipId }}</div>
+      <div class="ultimo-meta">
+        📍 {{ ultimoEscaneo.puntoNombre }} &nbsp;·&nbsp;
+        🕐 {{ formatHora(ultimoEscaneo.timestamp) }}
+      </div>
+    </div>
+
+    <!-- HISTORIAL -->
+    <div class="section" *ngIf="escaneos.length > 0">
+      <div class="section-label">Historial de escaneos</div>
+      <div class="historial">
+        <div
+          class="historial-item"
+          *ngFor="let e of escaneos; trackBy: trackById; let first = first"
+          [class.first]="first"
+        >
+          <div class="historial-icon">🏷</div>
+          <div class="historial-body">
+            <div class="historial-chip">{{ e.chipId }}</div>
+            <div class="historial-meta">{{ e.puntoNombre }} · {{ formatHora(e.timestamp) }}</div>
+          </div>
+          <div class="historial-fecha">{{ formatFecha(e.timestamp) }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="empty-historial" *ngIf="escaneos.length === 0 && puntoSeleccionado">
+      <div class="empty-icon">📭</div>
+      <p>Sin escaneos todavía</p>
+      <span>Dispara el gatillo para registrar el primer chip</span>
+    </div>
+
+  </div>
+</div>

@@ -1,0 +1,106 @@
+<aside class="sidebar">
+  <div class="sidebar-logo">⚡</div>
+  <div class="sidebar-avatar">AA</div>
+  <div class="sidebar-icon">→</div>
+  <div class="sidebar-bottom">
+    <div class="sidebar-icon">⚙</div>
+    <div class="sidebar-icon">👤</div>
+  </div>
+</aside>
+
+<div class="main">
+
+  <div class="topbar">
+    <h1>Línea de Trazabilidad</h1>
+    <button class="btn-primary" (click)="clearAll()">
+      <span>↺</span> Limpiar línea
+    </button>
+  </div>
+
+  <div class="content">
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-icon" style="background:#ede9fe;">🔗</div>
+        <div>
+          <div class="stat-label">Puntos configurados</div>
+          <div class="stat-value">{{ locations.length }}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background:#d1fae5;">✓</div>
+        <div>
+          <div class="stat-label">Línea activa</div>
+          <div class="stat-value">{{ isActive ? 'Sí' : 'No' }}</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon" style="background:#fef3c7;">→</div>
+        <div>
+          <div class="stat-label">Conexiones</div>
+          <div class="stat-value">{{ connectionsCount }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Añadir punto de trazabilidad</div>
+      <div class="input-row">
+        <input 
+          class="text-input" 
+          type="text" 
+          placeholder="Introduce ubicación a trazar..."
+          [(ngModel)]="inputLocation"
+          (keydown.enter)="addLocation()"
+        />
+        <button class="btn-add" (click)="addLocation()">
+          <span>+</span> Añadir punto
+        </button>
+        <button class="btn-ghost" (click)="clearAll()">Limpiar</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="pipeline-header">
+        <div class="card-title" style="margin:0">Flujo de trazabilidad</div>
+        <div class="badge">
+          <div class="badge-dot"></div>
+          <span>{{ locations.length }} nodo{{ locations.length !== 1 ? 's' : '' }}</span>
+        </div>
+      </div>
+
+      <div class="pipeline">
+        <div class="empty-state" *ngIf="locations.length === 0">
+          <div class="empty-icon">◈</div>
+          <p>Sin puntos configurados</p>
+          <span>Añade el primer punto para construir la línea</span>
+        </div>
+
+        <ng-container *ngFor="let loc of locations; let i = index; let last = last">
+          
+          <div class="node" [style.animation-delay]="(i * 0.04) + 's'">
+            <div class="node-header">
+              <span class="node-index">P-{{ (i + 1).toString().padStart(2, '0') }}</span>
+              <div style="display:flex; align-items:center; gap:6px;">
+                <div class="node-status"></div>
+                <button class="node-delete" (click)="removeLocation(i)" title="Eliminar">✕</button>
+              </div>
+            </div>
+            <div class="node-body">
+              <div class="node-name">{{ loc }}</div>
+              <div class="node-sub">Punto de control</div>
+            </div>
+          </div>
+
+          <div class="arrow" *ngIf="!last" [style.animation-delay]="(i * 0.04 + 0.05) + 's'">
+            <div class="arrow-track"></div>
+            <div class="arrow-head"></div>
+          </div>
+
+        </ng-container>
+
+      </div>
+    </div>
+
+  </div>
+</div>
