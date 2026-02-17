@@ -1,19 +1,13 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router'; // 👈
+import { Router, RouterLink } from '@angular/router';
 
 export interface Escaneo {
   id: string;
   chipId: string;
-  puntoId: string;
   puntoNombre: string;
   timestamp: string;
-}
-
-export interface PuntoLinea {
-  id: string;
-  nombre: string;
 }
 
 @Component({
@@ -23,149 +17,111 @@ export interface PuntoLinea {
   templateUrl: './operario.html',
   styleUrl: './operario.css'
 })
-export class OperarioComponent implements OnInit, OnDestroy {
+export class OperarioComponent implements OnInit, OnDestroy, AfterViewInit {
+  @ViewChild('scanInput') scanInput!: ElementRef;
 
-  constructor(private router: Router) {} 
-
-  // ── LÍNEA CONFIGURADA ──
-  puntosLinea: PuntoLinea[] = [];
-  puntoSeleccionado: PuntoLinea | null = null;
-
-  // ── ESCANEO ──
+  puntosLinea: any[] = [];
+  puntoSeleccionado: any = null;
   inputScan: string = '';
   escaneos: Escaneo[] = [];
+  
+  private ultimoChipLeido: string = '';
+  private ultimoTimeLeido: number = 0;
 
-  // ── FEEDBACK VISUAL ──
-  ultimoEscaneo: Escaneo | null = null;
-  flashVisible: boolean = false;
-  private flashTimer: any;
+  constructor(private router: Router) {}
 
-  // ── STATS ──
-  get totalEscaneos(): number {
-    return this.escaneos.length;
-  }
-
-  get escaneosPuntoActual(): number {
-    if (!this.puntoSeleccionado) return 0;
-    return this.escaneos.filter(e => e.puntoId === this.puntoSeleccionado!.id).length;
-  }
-
-  get ultimaHora(): string {
-    if (!this.ultimoEscaneo) return '--:--';
-    return new Date(this.ultimoEscaneo.timestamp).toLocaleTimeString('es-ES', {
-      hour: '2-digit', minute: '2-digit', second: '2-digit'
-    });
-  }
-
-  // ── LIFECYCLE ──
   ngOnInit(): void {
-    this.cargarPuntosDeLinea();
-    this.cargarEscaneos();
+    this.cargarConfiguracion();
+    this.cargarHistorial();
   }
 
-  ngOnDestroy(): void {
-    clearTimeout(this.flashTimer);
+  ngAfterViewInit() {
+    this.mantenerFoco();
   }
 
-  // ── CARGAR LÍNEA CONFIGURADA ──
-  private cargarPuntosDeLinea(): void {
-    // Lee las configuraciones guardadas por TrazabilidadComponent
+  ngOnDestroy() {}
+
+  private cargarConfiguracion() {
     const stored = localStorage.getItem('trazabilidad_configs');
-    if (!stored) return;
-
-    const configs = JSON.parse(stored);
-    if (configs.length === 0) return;
-
-    // Usa la primera configuración activa (o la más reciente)
-    const config = configs[0];
-    this.puntosLinea = config.locations.map((nombre: string, i: number) => ({
-      id: `punto-${i}`,
-      nombre
-    }));
-
-    // Autoselecciona el primero
-    if (this.puntosLinea.length > 0) {
-      this.puntoSeleccionado = this.puntosLinea[0];
-    }
-  }
-
-  // ── CARGAR ESCANEOS PREVIOS ──
-  private cargarEscaneos(): void {
-    const stored = localStorage.getItem('trazabilidad_escaneos');
     if (stored) {
-      this.escaneos = JSON.parse(stored);
-      if (this.escaneos.length > 0) {
-        this.ultimoEscaneo = this.escaneos[this.escaneos.length - 1];
+      const configs = JSON.parse(stored);
+      if (configs.length > 0) {
+        this.puntosLinea = configs[0].locations.map((l: string, i: number) => ({ id: i, nombre: l }));
+        this.puntoSeleccionado = this.puntosLinea[0];
       }
     }
   }
 
-  // ── SELECCIONAR PUNTO ──
-  seleccionarPunto(punto: PuntoLinea): void {
-    this.puntoSeleccionado = punto;
+  private cargarHistorial() {
+    const stored = localStorage.getItem('trazabilidad_escaneos');
+    if (stored) this.escaneos = JSON.parse(stored);
   }
 
-  // ── REGISTRAR ESCANEO (llamado por Enter de la PDA) ──
-  registrarEscaneo(): void {
-    const chip = this.inputScan.trim();
-    if (!chip || !this.puntoSeleccionado) return;
+  // DETECTA LA PDA EN TIEMPO REAL
+  onInputChange(value: string) {
+    // Si la PDA mete más de 6 caracteres (longitud típica mínima de chip/EAN)
+    if (value.length >= 6) { 
+      this.procesarDato(value.trim());
+    }
+  }
 
-    const nuevoEscaneo: Escaneo = {
-      id: Date.now().toString(),
-      chipId: chip,
-      puntoId: this.puntoSeleccionado.id,
-      puntoNombre: this.puntoSeleccionado.nombre,
+  procesarDato(rawId: string) {
+    if (!rawId) return;
+
+    // EVITAR DUPLICADOS POR REBOTE (1.5 segundos de margen)
+    const ahora = Date.now();
+    if (rawId === this.ultimoChipLeido && (ahora - this.ultimoTimeLeido) < 1500) {
+      this.inputScan = ''; // Limpiamos pero no guardamos
+      return;
+    }
+
+    const nuevo: Escaneo = {
+      id: ahora.toString() + Math.random().toString(36).substr(2, 4),
+      chipId: rawId,
+      puntoNombre: this.puntoSeleccionado?.nombre || 'General',
       timestamp: new Date().toISOString()
     };
 
-    // Añadir al array (los más recientes primero)
-    this.escaneos = [nuevoEscaneo, ...this.escaneos];
-    this.ultimoEscaneo = nuevoEscaneo;
+    // Actualizamos lista y estado
+    this.escaneos = [nuevo, ...this.escaneos];
+    this.ultimoChipLeido = rawId;
+    this.ultimoTimeLeido = ahora;
 
-    // Guardar en localStorage
+    // GUARDADO Y LIMPIEZA ABSOLUTA
     localStorage.setItem('trazabilidad_escaneos', JSON.stringify(this.escaneos));
-
-    // Limpiar input
-    this.inputScan = '';
-
-    // Flash de confirmación
-    this.triggerFlash();
+    
+    // Limpiamos el modelo y el elemento DOM directamente para asegurar
+    this.inputScan = ''; 
+    if (this.scanInput) {
+      this.scanInput.nativeElement.value = '';
+    }
+    
+    this.mantenerFoco();
   }
 
-  // ── LIMPIAR HISTORIAL ──
-  limpiarHistorial(): void {
-    this.escaneos = [];
-    this.ultimoEscaneo = null;
-    localStorage.removeItem('trazabilidad_escaneos');
+  mantenerFoco() {
+    setTimeout(() => {
+      if (this.scanInput) this.scanInput.nativeElement.focus();
+    }, 10);
   }
 
-  // ── FLASH VISUAL ──
-  private triggerFlash(): void {
-    this.flashVisible = true;
-    clearTimeout(this.flashTimer);
-    this.flashTimer = setTimeout(() => {
-      this.flashVisible = false;
-    }, 600);
+  seleccionarPunto(p: any) {
+    this.puntoSeleccionado = p;
+    this.mantenerFoco();
   }
 
-  // ── HELPERS ──
-  formatHora(iso: string): string {
-    return new Date(iso).toLocaleTimeString('es-ES', {
-      hour: '2-digit', minute: '2-digit', second: '2-digit'
-    });
+  limpiarHistorial() {
+    if (confirm('¿Vaciar todos los registros del inventario actual?')) {
+      this.escaneos = [];
+      localStorage.removeItem('trazabilidad_escaneos');
+      this.ultimoChipLeido = '';
+      this.mantenerFoco();
+    }
   }
 
-  formatFecha(iso: string): string {
-    return new Date(iso).toLocaleDateString('es-ES', {
-      day: '2-digit', month: 'short'
-    });
+  formatHora(iso: string) {
+    return new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
 
-  trackById(_: number, item: any): string {
-    return item.id;
-  }
-
-  volver(): void {
-    this.router.navigate(['/configuracion']);
-  }
+  volver() { this.router.navigate(['/configuracion']); }
 }

@@ -1,0 +1,92 @@
+<div class="main">
+  <div class="topbar">
+    <h1>Inventario Inteligente</h1>
+    <div style="display:flex; gap:12px;">
+      <button class="btn-ghost" (click)="resetear()">↺ Limpiar</button>
+      <button class="btn-ghost" (click)="volver()">← Salir</button>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- FASE 1: CARGA -->
+    <div *ngIf="resumenModelos.length === 0" class="fade-in">
+      <div class="card">
+        <div class="card-title">Carga de Datos</div>
+        <div class="upload-grid">
+          
+          <!-- Lecturas PDA -->
+          <div class="drop-zone" [class.loaded]="chipsLeidosBruto.length > 0" (click)="filePDA.click()">
+            <span class="drop-icon">📱</span>
+            <div class="drop-text">{{ archivoLecturasNombre || 'Subir CSV de la PDA' }}</div>
+            <div class="drop-subtext" *ngIf="!archivoLecturasNombre">Click para seleccionar archivo</div>
+            <div class="drop-subtext loaded-text" *ngIf="chipsLeidosBruto.length > 0">
+              ✓ {{ chipsLeidosBruto.length }} lecturas cargadas
+            </div>
+            <input #filePDA type="file" (change)="onLecturasSelected($event)" hidden accept=".csv,.txt">
+          </div>
+
+          <!-- Catálogo -->
+          <div class="drop-zone" [class.loaded]="catalogo.length > 0" (click)="fileCat.click()">
+            <span class="drop-icon">📖</span>
+            <div class="drop-text">{{ archivoCatalogoNombre || 'Subir Catálogo de Modelos' }}</div>
+            <div class="drop-subtext" *ngIf="!archivoCatalogoNombre">Click para seleccionar archivo</div>
+            <div class="drop-subtext loaded-text" *ngIf="catalogo.length > 0">
+              ✓ {{ catalogo.length }} modelos cargados
+            </div>
+            <input #fileCat type="file" (change)="onCatalogoSelected($event)" hidden accept=".csv,.txt">
+          </div>
+
+        </div>
+
+        <div style="text-align: center; margin-top: 2rem;" *ngIf="chipsLeidosBruto.length > 0 && catalogo.length > 0">
+          <button class="btn-primary" (click)="procesarAnalisis()">
+            <span>🔍 ANALIZAR Y CONTAR MODELOS</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- FASE 2: RESULTADOS -->
+    <div *ngIf="resumenModelos.length > 0" class="fade-in">
+      
+      <!-- Resumen (Tarjetas) -->
+      <div class="card">
+        <div class="card-title">Resumen por Modelo</div>
+        <div class="stats-grid">
+          <div class="stat-item" *ngFor="let m of resumenModelos">
+            <div class="stat-label">{{ m.nombre }}</div>
+            <div class="stat-value">{{ m.cantidad }} <span style="font-size: 0.9rem; color:#9ca3af; font-weight:400;">uds</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabla Detalle (Simplificada) -->
+      <div class="card">
+        <div class="card-title">Detalle de Chips</div>
+        <div class="tabla-container">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 60%">EPC (Código Chip)</th>
+                <th style="width: 40%">Modelo Identificado</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let r of resultadosChips">
+                <td style="font-family: monospace; color: #4b5563;">{{ r.epc }}</td>
+                <td>
+                  <span class="badge" [ngClass]="r.modelo === 'Desconocido' ? 'badge-neutral' : 'badge-success'">
+                    {{ r.modelo }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</div>
