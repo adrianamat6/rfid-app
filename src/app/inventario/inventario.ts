@@ -1,19 +1,18 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink, Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 
 export interface ChipResultado {
   epc: string;
-  tid: string;
   count: number;
   rssi: string;
-  rssiNum: number;
+  modelo: string;
 }
 
-export interface PuntoLinea {
-  id: number;
+export interface ModeloResumen {
   nombre: string;
+  cantidad: number;
 }
 
 @Component({
@@ -25,195 +24,144 @@ export interface PuntoLinea {
 })
 export class InventarioComponent implements OnInit {
 
-  puntosLinea: PuntoLinea[] = [];
-  puntoSeleccionado: PuntoLinea | null = null;
-  archivoNombre: string = '';
-  chipsCargados: ChipResultado[] = []; 
-  dragging: boolean = false;
-  resultados: ChipResultado[] = []; 
+  // --- ESTADO ---
+  archivoLecturasNombre: string = '';
+  chipsLeidosBruto: any[] = [];
 
-  filtroEpc: string = '';
-  soloMultiples: boolean = false;
-  sortCol: string = 'count';
-  sortAsc: boolean = false;
+  archivoCatalogoNombre: string = '';
+  catalogo: any[] = [];
+
+  resultadosChips: ChipResultado[] = [];
+  resumenModelos: ModeloResumen[] = [];
 
   constructor(private router: Router, private cdr: ChangeDetectorRef) {}
 
   ngOnInit(): void {
-    this.cargarLineaConfigurada();
+    console.log("Inventario listo.");
   }
 
-  private cargarLineaConfigurada(): void {
-    const stored = localStorage.getItem('trazabilidad_configs');
-    if (stored) {
-      const configs = JSON.parse(stored);
-      if (configs.length > 0) {
-        this.puntosLinea = configs[0].locations.map((nombre: string, i: number) => ({
-          id: i, nombre: nombre
-        }));
-        if (this.puntosLinea.length > 0) this.puntoSeleccionado = this.puntosLinea[0];
-      }
-    }
+  // --- UTILIDAD DE LIMPIEZA ---
+  private limpiarTexto(texto: string): string {
+    if (!texto) return '';
+    // Quita comillas dobles, simples, espacios y caracteres invisibles
+    return texto.replace(/['"]+/g, '').trim();
   }
 
-  seleccionarPunto(p: PuntoLinea): void {
-    this.puntoSeleccionado = p;
+  // --- PARSEADOR UNIVERSAL (Sirve para PDA y Maestro) ---
+  private parsearCSVUniversal(text: string): string[][] {
+    const lineas = text.split(/\r?\n/).filter(l => l.trim());
+    if (lineas.length === 0) return [];
+
+    // Detectar separador mirando la primera línea
+    const primeraLinea = lineas[0];
+    let separador = ',';
+    if (primeraLinea.includes(';')) separador = ';';
+    else if (primeraLinea.includes('\t')) separador = '\t';
+
+    return lineas.map(linea => {
+      // Divide y limpia cada columna
+      return linea.split(separador).map(col => this.limpiarTexto(col));
+    });
   }
 
-  onDragOver(e: DragEvent): void {
-    e.preventDefault();
-    this.dragging = true;
-  }
-
-  onDrop(e: DragEvent): void {
-    e.preventDefault();
-    this.dragging = false;
-    const file = e.dataTransfer?.files[0];
-    if (file) this.procesarLecturaArchivo(file);
-  }
-
-  onFileSelected(e: Event): void {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (file) this.procesarLecturaArchivo(file);
-  }
-
-  private procesarLecturaArchivo(file: File): void {
-    this.archivoNombre = file.name;
-    const reader = new FileReader();
+  // --- 1. CARGA PDA (Lecturas) ---
+  onLecturasSelected(e: any) {
+    const file = e.target.files[0];
+    if (!file) return;
     
-    reader.onload = (e: any) => {
-      const text = e.target.result;
-      console.log("Archivo leído, iniciando proceso...");
+    this.archivoLecturasNombre = file.name;
+    const reader = new FileReader();
+    reader.onload = (ev: any) => {
+      const filas = this.parsearCSVUniversal(ev.target.result);
       
-      const procesados = this.parsearCSVSuperRobusto(text);
-      
-      // IMPORTANTE: Asignamos y forzamos a Angular a que se entere del cambio
-      this.chipsCargados = [...procesados];
-      console.log("Total chips cargados:", this.chipsCargados.length);
-      console.table(this.chipsCargados.slice(0, 5)); // Ver los primeros 5 en consola
-      
-      this.cdr.detectChanges(); 
+      this.chipsLeidosBruto = filas.map(cols => {
+        // Asumimos formato: EPC, TID, COUNT, RSSI
+        // Si hay menos columnas, intentamos coger lo que haya
+        return {
+          epc: cols[0] || '',
+          count: parseInt(cols[2]) || 1,
+          rssi: cols[3] || '0'
+        };
+      }).filter(item => item.epc !== '' && item.epc.toUpperCase() !== 'EPC'); // Quitar cabecera y vacíos
+
+      this.cdr.detectChanges();
     };
     reader.readAsText(file, 'utf-8');
   }
 
-  /**
-   * PARSEADOR PASO A PASO
-   * Ignora las comas que están dentro de comillas y limpia todo.
-   */
-  private parsearCSVSuperRobusto(text: string): ChipResultado[] {
-    const lineas = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-    const listaFinal: ChipResultado[] = [];
+  // --- 2. CARGA CATÁLOGO (Maestro) ---
+  onCatalogoSelected(e: any) {
+    const file = e.target.files[0];
+    if (!file) return;
 
-    for (let i = 0; i < lineas.length; i++) {
-      let linea = lineas[i];
+    this.archivoCatalogoNombre = file.name;
+    const reader = new FileReader();
+    reader.onload = (ev: any) => {
+      const filas = this.parsearCSVUniversal(ev.target.result);
 
-      // Saltamos la cabecera si contiene la palabra EPC
-      if (linea.toUpperCase().includes('EPC')) continue;
+      this.catalogo = filas.map(cols => {
+        // Asumimos formato: EPC (Prefijo), NOMBRE MODELO
+        return {
+          prefijo: (cols[0] || '').toUpperCase(),
+          nombre: cols[1] || 'Sin nombre'
+        };
+      }).filter(item => item.prefijo !== '' && item.prefijo !== 'EPC'); // Quitar cabecera
 
-      // Separamos por comas manualmente respetando comillas
-      const columnas: string[] = [];
-      let campoActual = '';
-      let enComillas = false;
-
-      for (let char of linea) {
-        if (char === '"') {
-          enComillas = !enComillas;
-        } else if (char === ',' && !enComillas) {
-          columnas.push(campoActual.trim());
-          campoActual = '';
-        } else {
-          campoActual += char;
-        }
-      }
-      columnas.push(campoActual.trim()); // Añadir la última columna (RSSI)
-
-      if (columnas.length >= 4) {
-        const epc = columnas[0].replace(/"/g, ''); // Por si acaso tuviera comillas
-        const tid = columnas[1].replace(/"/g, '');
-        const count = parseInt(columnas[2].replace(/"/g, '')) || 1;
-        
-        // El RSSI en tu imagen es "-54,60". JS solo entiende puntos decimales.
-        const rssiTexto = columnas[3].replace(/"/g, '').replace(',', '.');
-        const rssiNum = parseFloat(rssiTexto) || -99;
-
-        listaFinal.push({
-          epc: epc,
-          tid: tid,
-          count: count,
-          rssi: rssiTexto,
-          rssiNum: rssiNum
-        });
-      }
-    }
-    return listaFinal;
+      console.log("Catálogo cargado:", this.catalogo); // Para depurar si hace falta
+      this.cdr.detectChanges();
+    };
+    reader.readAsText(file, 'utf-8');
   }
 
-  procesarInventario(): void {
-    if (this.chipsCargados.length === 0) return;
+  // --- 3. PROCESAR ---
+  procesarAnalisis() {
+    const mapaModelos = new Map<string, number>();
+    
+    this.resultadosChips = this.chipsLeidosBruto.map(chip => {
+      let modeloEncontrado = 'Desconocido';
+      const epcUpper = chip.epc.toUpperCase();
 
-    const mapa = new Map<string, ChipResultado>();
+      // Buscamos coincidencia
+      // 1. Coincidencia exacta
+      // 2. O si el chip empieza por el código del catálogo
+      const match = this.catalogo.find(item => 
+        epcUpper === item.prefijo || epcUpper.startsWith(item.prefijo)
+      );
 
-    this.chipsCargados.forEach(chip => {
-      if (mapa.has(chip.epc)) {
-        const existente = mapa.get(chip.epc)!;
-        existente.count += chip.count;
-        if (chip.rssiNum > existente.rssiNum) {
-          existente.rssi = chip.rssi;
-          existente.rssiNum = chip.rssiNum;
-        }
-      } else {
-        mapa.set(chip.epc, { ...chip });
+      if (match) {
+        modeloEncontrado = match.nombre;
       }
+
+      // Contar para el resumen
+      const actual = mapaModelos.get(modeloEncontrado) || 0;
+      mapaModelos.set(modeloEncontrado, actual + 1);
+
+      return {
+        epc: chip.epc,
+        count: chip.count,
+        rssi: chip.rssi,
+        modelo: modeloEncontrado
+      };
     });
 
-    this.resultados = Array.from(mapa.values());
-    this.ordenarPor('count');
+    // Crear array de resumen ordenado por cantidad
+    this.resumenModelos = Array.from(mapaModelos.entries())
+      .map(([nombre, cantidad]) => ({ nombre, cantidad }))
+      .sort((a, b) => b.cantidad - a.cantidad);
+
     this.cdr.detectChanges();
   }
 
-  // ── RESTO DE MÉTODOS (IGUALES) ──
-  get rssiPromedio(): string {
-    if (!this.resultados.length) return '0';
-    const sum = this.resultados.reduce((acc, r) => acc + r.rssiNum, 0);
-    return (sum / this.resultados.length).toFixed(1);
+  resetear() {
+    this.archivoLecturasNombre = '';
+    this.archivoCatalogoNombre = '';
+    this.chipsLeidosBruto = [];
+    this.catalogo = [];
+    this.resultadosChips = [];
+    this.resumenModelos = [];
   }
 
-  get resultadosFiltrados(): ChipResultado[] {
-    let lista = [...this.resultados];
-    if (this.filtroEpc) lista = lista.filter(r => r.epc.toLowerCase().includes(this.filtroEpc.toLowerCase()));
-    if (this.soloMultiples) lista = lista.filter(r => r.count > 1);
-    lista.sort((a, b) => {
-      let valA: any = a[this.sortCol as keyof ChipResultado];
-      let valB: any = b[this.sortCol as keyof ChipResultado];
-      if (this.sortCol === 'rssi') { valA = a.rssiNum; valB = b.rssiNum; }
-      return this.sortAsc ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
-    });
-    return lista;
+  volver() {
+    this.router.navigate(['/configuracion']);
   }
-
-  ordenarPor(col: string): void {
-    if (this.sortCol === col) this.sortAsc = !this.sortAsc; 
-    else { this.sortCol = col; this.sortAsc = false; }
-  }
-
-  getSignalWidth(rssi: number): number {
-    const width = ((rssi + 90) / 60) * 100;
-    return Math.max(10, Math.min(100, width));
-  }
-
-  exportarCSV(): void {
-    const encabezado = 'EPC;LECTURAS;RSSI;PUNTO_CONTROL;FECHA\n';
-    const filas = this.resultados.map(r => `"${r.epc}";"${r.count}";"${r.rssi}";"${this.puntoSeleccionado?.nombre}";"${new Date().toLocaleString()}"`).join('\n');
-    const blob = new Blob([encabezado + filas], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a'); link.href = url; link.setAttribute('download', `inventario.csv`); link.click();
-  }
-
-  resetear(): void {
-    this.resultados = []; this.chipsCargados = []; this.archivoNombre = ''; this.filtroEpc = '';
-    this.cdr.detectChanges();
-  }
-
-  volver(): void { this.router.navigate(['/configuracion']); }
 }
