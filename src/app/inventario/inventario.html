@@ -1,0 +1,176 @@
+<aside class="sidebar">
+  <div class="sidebar-logo">⚡</div>
+  <div class="sidebar-avatar">AA</div>
+  <div class="sidebar-bottom">
+    <div class="sidebar-icon">⚙</div>
+    <div class="sidebar-icon">👤</div>
+  </div>
+</aside>
+
+<div class="main">
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <h1>Control de Inventario</h1>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <button class="btn-ghost" (click)="resetear()" *ngIf="chipsCargados.length > 0">↺ Limpiar todo</button>
+      <button class="btn-ghost" routerLink="/configuracion">← Configuración</button>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- PASO 1: SUBIDA (Solo se ve si no hay resultados finales) -->
+    <ng-container *ngIf="resultados.length === 0">
+      
+      <!-- DROP ZONE -->
+      <div class="card">
+        <div class="card-title">1. Cargar archivo de la PDA</div>
+        <div
+          class="drop-zone"
+          [class.drag-over]="dragging"
+          (dragover)="onDragOver($event)"
+          (dragleave)="dragging = false"
+          (drop)="onDrop($event)"
+          (click)="fileInput.click()"
+        >
+          <div class="drop-icon">📊</div>
+          <div class="drop-hint">Arrastra el CSV aquí o haz clic para seleccionarlo</div>
+          <div class="drop-sub">El archivo debe contener las columnas: EPC, TID, COUNT, RSSI</div>
+          <input #fileInput type="file" accept=".csv" style="display:none" (change)="onFileSelected($event)" />
+        </div>
+      </div>
+
+      <!-- PREVISUALIZACIÓN (Aparece al cargar el CSV) -->
+      <div class="card" *ngIf="chipsCargados.length > 0" style="animation: fadeIn 0.3s ease;">
+        <div class="pipeline-header">
+          <div class="card-title" style="margin:0">2. Previsualización de datos ({{ archivoNombre }})</div>
+          <div class="badge">
+            <div class="badge-dot" style="background: #6366f1;"></div>
+            <span>{{ chipsCargados.length }} líneas detectadas</span>
+          </div>
+        </div>
+
+        <div class="tabla-container" style="max-height: 250px; margin-bottom: 20px;">
+          <table class="tabla">
+            <thead>
+              <tr>
+                <th>EPC</th>
+                <th>Lecturas</th>
+                <th>RSSI (Señal)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let c of chipsCargados.slice(0, 5)">
+                <td class="td-epc">{{ c.epc }}</td>
+                <td>{{ c.count }}</td>
+                <td class="td-rssi">{{ c.rssi }}</td>
+              </tr>
+              <tr *ngIf="chipsCargados.length > 5">
+                <td colspan="3" style="text-align: center; color: #9ca3af; font-style: italic; padding: 10px;">
+                  ... y {{ chipsCargados.length - 5 }} chips más ...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- SELECCIONAR PUNTO -->
+        <div class="card-title">3. Seleccionar punto de control para el registro</div>
+        <div class="puntos-grid">
+          <button
+            class="punto-btn"
+            *ngFor="let p of puntosLinea; let i = index"
+            [class.active]="puntoSeleccionado?.id === p.id"
+            (click)="seleccionarPunto(p)"
+          >
+            <span class="punto-idx">P-{{ (i+1).toString().padStart(2,'0') }}</span>
+            <span class="punto-nombre">{{ p.nombre }}</span>
+          </button>
+        </div>
+
+        <div class="no-linea" *ngIf="puntosLinea.length === 0">
+          ⚠ No hay línea configurada. Debes crear una en "Configuración" para poder analizar.
+        </div>
+
+        <div style="margin-top: 24px; display: flex; justify-content: center;">
+          <button
+            class="btn-primary"
+            style="padding: 14px 40px; font-size: 15px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);"
+            (click)="procesarInventario()"
+            [disabled]="!puntoSeleccionado"
+          >
+            🚀 ANALIZAR Y GUARDAR RESULTADOS
+          </button>
+        </div>
+      </div>
+    </ng-container>
+
+    <!-- RESULTADOS (Solo se ve después de darle a Analizar) -->
+    <ng-container *ngIf="resultados.length > 0">
+      
+      <!-- STATS -->
+      <div class="stats-row" style="animation: slideIn 0.3s ease;">
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#ede9fe;">🏷</div>
+          <div>
+            <div class="stat-label">Chips únicos</div>
+            <div class="stat-value">{{ resultados.length }}</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#d1fae5;">✓</div>
+          <div>
+            <div class="stat-label">Punto guardado</div>
+            <div class="stat-value stat-sm">{{ puntoSeleccionado?.nombre }}</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:#fee2e2;">📡</div>
+          <div>
+            <div class="stat-label">RSSI Promedio</div>
+            <div class="stat-value stat-sm">{{ rssiPromedio }} dB</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TABLA DETALLADA -->
+      <div class="card" style="animation: fadeIn 0.5s ease;">
+        <div class="filtros">
+          <input class="text-input" type="text" placeholder="Filtrar por EPC..." [(ngModel)]="filtroEpc" />
+          <button class="btn-ghost" (click)="exportarCSV()">⬇ Descargar Informe</button>
+          <button class="btn-ghost" (click)="resetear()">↺ Nuevo análisis</button>
+        </div>
+
+        <div class="tabla-container">
+          <table class="tabla">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th (click)="ordenarPor('epc')" style="cursor:pointer">EPC ↕</th>
+                <th (click)="ordenarPor('count')" style="cursor:pointer">Lecturas ↕</th>
+                <th>RSSI</th>
+                <th>Señal</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let r of resultadosFiltrados; let i = index">
+                <td class="td-num">{{ i + 1 }}</td>
+                <td class="td-epc">{{ r.epc }}</td>
+                <td class="td-count">
+                  <span class="count-badge" [class.count-high]="r.count > 1">{{ r.count }}</span>
+                </td>
+                <td class="td-rssi">{{ r.rssi }}</td>
+                <td>
+                  <div class="signal-bar">
+                    <div class="signal-fill" [style.width]="getSignalWidth(r.rssiNum) + '%'" [class.signal-weak]="r.rssiNum < -60"></div>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </ng-container>
+
+  </div>
+</div>
