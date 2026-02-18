@@ -1,88 +1,135 @@
-<div class="main">
-  <div class="topbar">
-    <h1>Inventario Inteligente</h1>
+<div style="min-height: 100vh; background: #f4f4f6; display: flex; flex-direction: column; font-family: 'Inter', sans-serif;">
+  
+  <!-- TOPBAR -->
+  <header style="background: white; padding: 16px 32px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; z-index: 10;">
+    <h1 style="font-size: 20px; font-weight: 700; color: #111827; margin: 0;">
+      📦 Inventario: {{ lineaActiva?.name }}
+    </h1>
     <div style="display:flex; gap:12px;">
-      <button class="btn-ghost" (click)="resetear()">↺ Limpiar</button>
-      <button class="btn-ghost" (click)="volver()">← Salir</button>
+      <button class="btn-ghost" (click)="volver()" style="padding: 8px 16px; border-radius: 6px; border: 1px solid #e5e7eb; background: white; cursor: pointer; font-weight: 500;">
+        ← Volver
+      </button>
     </div>
-  </div>
+  </header>
 
-  <div class="content">
+  <div style="padding: 32px; max-width: 1200px; margin: 0 auto; width: 100%; box-sizing: border-box;">
 
-    <!-- FASE 1: CARGA -->
-    <div *ngIf="resumenModelos.length === 0" class="fade-in">
-      <div class="card">
-        <div class="card-title">Carga de Datos</div>
-        <div class="upload-grid">
-          
-          <!-- Lecturas PDA -->
-          <div class="drop-zone" [class.loaded]="chipsLeidosBruto.length > 0" (click)="filePDA.click()">
-            <span class="drop-icon">📱</span>
-            <div class="drop-text">{{ archivoLecturasNombre || 'Subir CSV de la PDA' }}</div>
-            <div class="drop-subtext" *ngIf="!archivoLecturasNombre">Click para seleccionar archivo</div>
-            <div class="drop-subtext loaded-text" *ngIf="chipsLeidosBruto.length > 0">
-              ✓ {{ chipsLeidosBruto.length }} lecturas cargadas
-            </div>
-            <input #filePDA type="file" (change)="onLecturasSelected($event)" hidden accept=".csv,.txt">
-          </div>
+    <!-- PESTAÑAS DE PUNTOS -->
+    <div style="background: white; border-radius: 12px; padding: 20px; margin-bottom: 24px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+      <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+        <button
+          *ngFor="let p of puntos; let i = index"
+          (click)="irAPunto(i)"
+          [style.background]="puntoActualIdx === i ? '#6366f1' : '#f9fafb'"
+          [style.color]="puntoActualIdx === i ? 'white' : '#1f2937'"
+          [style.border]="puntoActualIdx === i ? '2px solid #6366f1' : '1px solid #e5e7eb'"
+          style="padding: 12px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.2s; display: flex; align-items: center;">
+          {{ p.nombre }}
+          <span *ngIf="p.chips.length > 0" 
+                style="margin-left: 8px; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: rgba(0,0,0,0.1); color: inherit;">
+            {{ p.chips.length }}
+          </span>
+        </button>
+      </div>
 
-          <!-- Catálogo -->
-          <div class="drop-zone" [class.loaded]="catalogo.length > 0" (click)="fileCat.click()">
-            <span class="drop-icon">📖</span>
-            <div class="drop-text">{{ archivoCatalogoNombre || 'Subir Catálogo de Modelos' }}</div>
-            <div class="drop-subtext" *ngIf="!archivoCatalogoNombre">Click para seleccionar archivo</div>
-            <div class="drop-subtext loaded-text" *ngIf="catalogo.length > 0">
-              ✓ {{ catalogo.length }} modelos cargados
-            </div>
-            <input #fileCat type="file" (change)="onCatalogoSelected($event)" hidden accept=".csv,.txt">
-          </div>
+      <!-- BOTÓN COMPARAR -->
+      <button 
+        (click)="generarComparativa()"
+        *ngIf="puntos.length > 1"
+        style="width: 100%; padding: 14px; font-size: 15px; background: #111827; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; transition: opacity 0.2s;">
+        🔍 GENERAR COMPARATIVA DE TRAZABILIDAD
+      </button>
+    </div>
 
+    <!-- VISTA COMPARATIVA -->
+    <div *ngIf="mostrarComparativa" style="background: white; border-radius: 12px; padding: 24px; margin-bottom: 24px; border: 1px solid #e5e7eb; animation: fadeIn 0.3s ease;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="font-size: 18px; font-weight: 700; margin: 0;">📊 Análisis de Flujo</h2>
+        <button (click)="mostrarComparativa = false" style="background: none; border: none; color: #6b7280; cursor: pointer; font-size: 18px;">✕</button>
+      </div>
+
+      <!-- RESUMEN GENERAL (Usando los nuevos GETTERS) -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 32px;">
+        <div style="background: #f0fdf4; padding: 16px; border-radius: 8px; border-left: 4px solid #10b981;">
+          <div style="font-size: 11px; color: #166534; font-weight: 700; text-transform: uppercase;">Chips Totales</div>
+          <div style="font-size: 28px; font-weight: 800; color: #166534;">{{ totalChipsLinea }}</div>
         </div>
-
-        <div style="text-align: center; margin-top: 2rem;" *ngIf="chipsLeidosBruto.length > 0 && catalogo.length > 0">
-          <button class="btn-primary" (click)="procesarAnalisis()">
-            <span>🔍 ANALIZAR Y CONTAR MODELOS</span>
-          </button>
+        <div style="background: #fef2f2; padding: 16px; border-radius: 8px; border-left: 4px solid #ef4444;">
+          <div style="font-size: 11px; color: #991b1b; font-weight: 700; text-transform: uppercase;">Pérdidas</div>
+          <div style="font-size: 28px; font-weight: 800; color: #ef4444;">{{ totalPerdidasCount }}</div>
+        </div>
+        <div style="background: #f5f3ff; padding: 16px; border-radius: 8px; border-left: 4px solid #8b5cf6;">
+          <div style="font-size: 11px; color: #4c1d95; font-weight: 700; text-transform: uppercase;">Apariciones</div>
+          <div style="font-size: 28px; font-weight: 800; color: #8b5cf6;">{{ totalAparicionesCount }}</div>
         </div>
       </div>
-    </div>
 
-    <!-- FASE 2: RESULTADOS -->
-    <div *ngIf="resumenModelos.length > 0" class="fade-in">
+      <!-- DETALLE PÉRDIDAS -->
+      <div *ngIf="perdidas.length > 0" style="margin-bottom: 32px;">
+        <h3 style="font-size: 14px; font-weight: 700; color: #ef4444; margin-bottom: 12px;">⚠️ Pérdidas detectadas por tramo:</h3>
+        <div *ngFor="let p of perdidas" style="background: #fafafa; padding: 16px; border-radius: 8px; margin-bottom: 12px; border: 1px solid #f1f1f1;">
+          <div style="font-weight: 700; color: #374151; margin-bottom: 8px;">{{ p.punto }}</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+            <span *ngFor="let chip of p.chips" style="background: #fff; border: 1px solid #fee2e2; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-family: monospace;">
+              {{ chip }} <small style="color: #94a3b8">({{ identificarModelo(chip) }})</small>
+            </span>
+          </div>
+        </div>
+      </div>
       
-      <!-- Resumen (Tarjetas) -->
-      <div class="card">
-        <div class="card-title">Resumen por Modelo</div>
-        <div class="stats-grid">
-          <div class="stat-item" *ngFor="let m of resumenModelos">
-            <div class="stat-label">{{ m.nombre }}</div>
-            <div class="stat-value">{{ m.cantidad }} <span style="font-size: 0.9rem; color:#9ca3af; font-weight:400;">uds</span></div>
-          </div>
-        </div>
+      <div *ngIf="perdidas.length === 0" style="text-align: center; padding: 40px; color: #10b981; font-weight: 600;">
+        ✅ No se han detectado pérdidas en la línea.
       </div>
 
-      <!-- Tabla Detalle (Simplificada) -->
-      <div class="card">
-        <div class="card-title">Detalle de Chips</div>
-        <div class="tabla-container">
-          <table>
-            <thead>
-              <tr>
-                <th style="width: 60%">EPC (Código Chip)</th>
-                <th style="width: 40%">Modelo Identificado</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let r of resultadosChips">
-                <td style="font-family: monospace; color: #4b5563;">{{ r.epc }}</td>
-                <td>
-                  <span class="badge" [ngClass]="r.modelo === 'Desconocido' ? 'badge-neutral' : 'badge-success'">
-                    {{ r.modelo }}
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+      <button (click)="mostrarComparativa = false" style="width: 100%; padding: 12px; border: 1px solid #e5e7eb; background: #f9fafb; border-radius: 8px; cursor: pointer; font-weight: 600;">
+        Cerrar Comparativa
+      </button>
+    </div>
+
+    <!-- VISTA POR PUNTO -->
+    <div *ngIf="!mostrarComparativa">
+
+      <!-- CATÁLOGO -->
+      <div *ngIf="catalogo.length === 0" style="background: #fffbeb; border: 1px solid #fef3c7; border-radius: 12px; padding: 24px; margin-bottom: 24px; text-align: center;">
+        <div style="font-size: 40px; margin-bottom: 12px;">📖</div>
+        <h3 style="font-size: 16px; font-weight: 700; color: #92400e; margin-bottom: 8px;">Falta el Catálogo de Modelos</h3>
+        <p style="color: #b45309; font-size: 14px; margin-bottom: 20px;">Sube el archivo maestro para identificar los EPCs por su nombre.</p>
+        <button (click)="fileCat.click()" style="background: #d97706; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 700; cursor: pointer;">
+          Subir Catálogo CSV
+        </button>
+        <input #fileCat type="file" (change)="onCatalogoSelected($event)" hidden accept=".csv">
+      </div>
+
+      <!-- CARGA DE ESCANEO -->
+      <div *ngIf="catalogo.length > 0" style="background: white; border-radius: 12px; padding: 24px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <h3 style="font-size: 16px; font-weight: 700; color: #111827; margin: 0;">Punto de Control: {{ puntoActual.nombre }}</h3>
+          <span *ngIf="archivoCatalogoNombre" style="font-size: 11px; color: #10b981; font-weight: 600;">Catálogo: {{ archivoCatalogoNombre }}</span>
+        </div>
+
+        <div (click)="fileCSV.click()" style="border: 2px dashed #e2e8f0; padding: 40px; text-align: center; border-radius: 12px; cursor: pointer; background: #f8fafc; transition: 0.2s;">
+          <div style="font-size: 32px; margin-bottom: 12px;">📄</div>
+          <div style="font-weight: 700; color: #475569;">{{ archivoCSVNombre || 'Haz clic para subir el archivo de la PDA' }}</div>
+          <p style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Formatos aceptados: .csv o .txt</p>
+          <input #fileCSV type="file" (change)="onCSVSelected($event)" hidden accept=".csv,.txt">
+        </div>
+
+        <button 
+          *ngIf="chipsTempCSV.length > 0"
+          (click)="guardarEnPunto()"
+          style="width: 100%; margin-top: 16px; padding: 14px; background: #10b981; color: white; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; transition: background 0.2s;">
+          💾 GUARDAR DATOS EN {{ puntoActual.nombre.toUpperCase() }}
+        </button>
+
+        <!-- RESUMEN MODELOS -->
+        <div *ngIf="puntoActual.chips.length > 0" style="margin-top: 32px; border-top: 1px solid #f1f1f1; padding-top: 24px;">
+          <h4 style="font-size: 14px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 16px; letter-spacing: 0.5px;">Resumen por Modelo</h4>
+          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <div *ngFor="let m of resumenModelos" style="background: #f1f5f9; padding: 12px 16px; border-radius: 8px; min-width: 120px;">
+              <div style="font-size: 11px; color: #64748b; font-weight: 600; margin-bottom: 4px;">{{ m.nombre }}</div>
+              <div style="font-size: 20px; font-weight: 800; color: #1e293b;">{{ m.cantidad }} <small style="font-size: 12px; font-weight: 400;">uds</small></div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -90,3 +137,10 @@
 
   </div>
 </div>
+
+<style>
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+</style>

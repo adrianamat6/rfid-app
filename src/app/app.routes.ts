@@ -9,5 +9,6 @@ export const routes: Routes = [
   { path: '', redirectTo: 'configuracion', pathMatch: 'full' },
   { path: 'configuracion', component: TrazabilidadComponent },
   { path: 'operario', component: OperarioComponent },
-  { path: 'inventario', component: InventarioComponent }
+  { path: 'inventario', component: InventarioComponent },
+
 ];

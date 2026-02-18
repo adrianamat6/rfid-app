@@ -1,9 +1,9 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
+import { Component, OnInit, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { Escaneo } from '../../interfaces/rfid.models';
-
+import { Escaneo, SavedConfig } from '../../interfaces/rfid.models';
+import { TrazabilidadService } from '../../services/trazabilidad.service';
 
 @Component({
   selector: 'app-operario',
@@ -12,110 +12,71 @@ import { Escaneo } from '../../interfaces/rfid.models';
   templateUrl: './operario.html',
   styleUrl: './operario.css'
 })
-export class OperarioComponent implements OnInit, OnDestroy, AfterViewInit {
+export class OperarioComponent implements OnInit, AfterViewInit {
   @ViewChild('scanInput') scanInput!: ElementRef;
 
+  activa: SavedConfig | null = null;
   puntosLinea: any[] = [];
   puntoSeleccionado: any = null;
   inputScan: string = '';
   escaneos: Escaneo[] = [];
-  
-  private ultimoChipLeido: string = '';
-  private ultimoTimeLeido: number = 0;
 
-  constructor(private router: Router) {}
+  constructor(
+    private router: Router, 
+    private trazabilidadService: TrazabilidadService
+  ) {}
 
   ngOnInit(): void {
-    this.cargarConfiguracion();
-    this.cargarHistorial();
+    this.activa = this.trazabilidadService.getActiveConfig();
+    if (this.activa) {
+      this.puntosLinea = this.activa.locations.map((l, i) => ({ id: i, nombre: l }));
+      this.seleccionarPunto(this.puntosLinea[0]);
+    }
   }
 
-  ngAfterViewInit() {
+  ngAfterViewInit() { this.mantenerFoco(); }
+
+  seleccionarPunto(p: any) {
+    this.puntoSeleccionado = p;
+    if (this.activa) {
+      this.escaneos = this.trazabilidadService.getScansForPoint(this.activa.id, p.nombre);
+    }
     this.mantenerFoco();
   }
 
-  ngOnDestroy() {}
-
-  private cargarConfiguracion() {
-    const stored = localStorage.getItem('trazabilidad_configs');
-    if (stored) {
-      const configs = JSON.parse(stored);
-      if (configs.length > 0) {
-        this.puntosLinea = configs[0].locations.map((l: string, i: number) => ({ id: i, nombre: l }));
-        this.puntoSeleccionado = this.puntosLinea[0];
-      }
-    }
-  }
-
-  private cargarHistorial() {
-    const stored = localStorage.getItem('trazabilidad_escaneos');
-    if (stored) this.escaneos = JSON.parse(stored);
-  }
-
-  // DETECTA LA PDA EN TIEMPO REAL
   onInputChange(value: string) {
-    // Si la PDA mete más de 6 caracteres (longitud típica mínima de chip/EAN)
-    if (value.length >= 6) { 
-      this.procesarDato(value.trim());
-    }
+    if (value.length >= 6) this.procesarDato(value.trim());
   }
 
   procesarDato(rawId: string) {
-    if (!rawId) return;
-
-    // EVITAR DUPLICADOS POR REBOTE (1.5 segundos de margen)
-    const ahora = Date.now();
-    if (rawId === this.ultimoChipLeido && (ahora - this.ultimoTimeLeido) < 1500) {
-      this.inputScan = ''; // Limpiamos pero no guardamos
-      return;
-    }
+    if (!rawId || !this.activa || !this.puntoSeleccionado) return;
 
     const nuevo: Escaneo = {
-      id: ahora.toString() + Math.random().toString(36).substr(2, 4),
+      id: Date.now().toString(),
       chipId: rawId,
-      puntoNombre: this.puntoSeleccionado?.nombre || 'General',
+      puntoNombre: this.puntoSeleccionado.nombre,
       timestamp: new Date().toISOString()
     };
 
-    // Actualizamos lista y estado
+    this.trazabilidadService.addScan(this.activa.id, this.puntoSeleccionado.nombre, nuevo);
     this.escaneos = [nuevo, ...this.escaneos];
-    this.ultimoChipLeido = rawId;
-    this.ultimoTimeLeido = ahora;
-
-    // GUARDADO Y LIMPIEZA ABSOLUTA
-    localStorage.setItem('trazabilidad_escaneos', JSON.stringify(this.escaneos));
-    
-    // Limpiamos el modelo y el elemento DOM directamente para asegurar
-    this.inputScan = ''; 
-    if (this.scanInput) {
-      this.scanInput.nativeElement.value = '';
-    }
-    
+    this.inputScan = '';
     this.mantenerFoco();
   }
 
   mantenerFoco() {
-    setTimeout(() => {
-      if (this.scanInput) this.scanInput.nativeElement.focus();
-    }, 10);
-  }
-
-  seleccionarPunto(p: any) {
-    this.puntoSeleccionado = p;
-    this.mantenerFoco();
-  }
-
-  limpiarHistorial() {
-    if (confirm('¿Vaciar todos los registros del inventario actual?')) {
-      this.escaneos = [];
-      localStorage.removeItem('trazabilidad_escaneos');
-      this.ultimoChipLeido = '';
-      this.mantenerFoco();
-    }
+    setTimeout(() => this.scanInput?.nativeElement.focus(), 50);
   }
 
   formatHora(iso: string) {
-    return new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return new Date(iso).toLocaleTimeString('es-ES');
+  }
+
+  limpiarHistorial() {
+    if (confirm('¿Borrar escaneos de este punto?')) {
+      this.escaneos = [];
+      // Aquí podrías añadir un método clearPointScans al servicio
+    }
   }
 
   volver() { this.router.navigate(['/configuracion']); }
