@@ -2,14 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router'; // 👈
-
-export interface SavedConfig {
-  id: string;
-  name: string;
-  locations: string[];
-  createdAt: string;
-  updatedAt: string;
-}
+import { SavedConfig } from '../../interfaces/rfid.models';
 
 @Component({
   selector: 'app-trazabilidad',

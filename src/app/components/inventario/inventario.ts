@@ -2,18 +2,7 @@ import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-
-export interface ChipResultado {
-  epc: string;
-  count: number;
-  rssi: string;
-  modelo: string;
-}
-
-export interface ModeloResumen {
-  nombre: string;
-  cantidad: number;
-}
+import { ChipResultado, ModeloResumen } from '../../interfaces/rfid.models';
 
 @Component({
   selector: 'app-inventario',

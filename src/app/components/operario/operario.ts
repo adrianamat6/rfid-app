@@ -2,13 +2,8 @@ import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewInit } fr
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { Escaneo } from '../../interfaces/rfid.models';
 
-export interface Escaneo {
-  id: string;
-  chipId: string;
-  puntoNombre: string;
-  timestamp: string;
-}
 
 @Component({
   selector: 'app-operario',
