@@ -1,0 +1,163 @@
+<div class="inv-root">
+
+  <header class="inv-topbar">
+    <div class="inv-topbar-left">
+      <button class="btn-back" (click)="volver()">←</button>
+      <div class="inv-title-block">
+        <span class="inv-label">AUDITORÍA UNITARIA · CHIP A CHIP</span>
+        <h1 class="inv-title">{{ lineaActiva?.name || 'Sin línea' }}</h1>
+      </div>
+    </div>
+    <div class="inv-topbar-right">
+      <span class="inv-route-pill">
+        <span *ngFor="let p of puntos; let last = last">
+          {{ p }}<span *ngIf="!last" class="route-sep"> → </span>
+        </span>
+      </span>
+    </div>
+  </header>
+
+  <div class="inv-body">
+
+    <!-- PASO 1: Catálogo -->
+    <section class="inv-section">
+      <div class="section-head">
+        <div class="step-badge">01</div>
+        <div>
+          <div class="section-title">Catálogo Maestro</div>
+          <div class="section-sub">Prefijos EPC → nombres de modelo (el serial se extrae automáticamente)</div>
+        </div>
+        <div class="section-status" [class.done]="catalogo.length > 0">
+          {{ catalogo.length > 0 ? '✓ ' + catalogo.length + ' modelos' : 'Esperando archivo...' }}
+        </div>
+      </div>
+      <div class="upload-row">
+        <label class="upload-btn" [class.loaded]="catalogo.length > 0">
+          <input type="file" accept=".csv,.txt" (change)="onCatalogoSelected($event)" hidden>
+          <span>{{ catalogoNombre || '📂 Cargar Catálogo .csv' }}</span>
+        </label>
+      </div>
+    </section>
+
+    <!-- PASO 2: Lecturas por punto -->
+    <section class="inv-section">
+      <div class="section-head">
+        <div class="step-badge">02</div>
+        <div>
+          <div class="section-title">Lecturas de Puntos de Control</div>
+          <div class="section-sub">Cada línea del CSV = 1 chip físico único detectado en ese punto</div>
+        </div>
+      </div>
+      <div class="puntos-upload-grid">
+        <div class="punto-upload-card" *ngFor="let p of puntos" [class.loaded]="(epcsPorPunto[p]?.length ?? 0) > 0">
+          <div class="punto-upload-header">
+            <span class="punto-upload-name">{{ p }}</span>
+            <span class="punto-count" *ngIf="(epcsPorPunto[p]?.length ?? 0) > 0">
+              {{ epcsPorPunto[p].length }} chips
+            </span>
+          </div>
+          <label class="punto-upload-btn">
+            <input type="file" accept=".csv,.txt" (change)="onCSVPuntoSelected($event, p)" hidden>
+            <span>{{ csvNombres[p] || '+ Cargar CSV' }}</span>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- ACCIÓN -->
+    <div class="action-bar" *ngIf="puntosConCSV > 0">
+      <button class="btn-generar" (click)="generarTabla()">
+        ⚡ GENERAR AUDITORÍA UNITARIA
+      </button>
+    </div>
+
+    <!-- TABLA RESULTADO -->
+    <section class="inv-section" *ngIf="tablaGenerada">
+
+      <!-- Stats -->
+      <div class="stats-bar">
+        <div class="stat-chip total">
+          <b>{{ totalArticulos }}</b> Unidades físicas
+        </div>
+        <div class="stat-chip ok">
+          <b>{{ articulosCompletos }}</b> Completaron el recorrido
+        </div>
+        <div class="stat-chip warn" *ngIf="articulosParciales > 0">
+          <b>{{ articulosParciales }}</b> Recorrido incompleto
+        </div>
+      </div>
+
+      <!-- Filtro -->
+      <div class="tabla-toolbar">
+        <input
+          class="filtro-input"
+          type="text"
+          placeholder="🔍 Filtrar por modelo, serial o EPC completo..."
+          [(ngModel)]="filtroTexto"
+        >
+        <span class="filtro-count">{{ filasFiltradas.length }} resultados</span>
+      </div>
+
+      <!-- Tabla -->
+      <div class="tabla-scroll">
+        <table class="comp-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>MODELO</th>
+              <th>SERIAL (Unidad)</th>
+              <th>EPC COMPLETO</th>
+              <th *ngFor="let p of puntos" class="text-center">{{ p }}</th>
+              <th class="text-center">RECORRIDO</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              *ngFor="let fila of filasFiltradas; let i = index"
+              [class.row-complete]="presenciaTotal(fila) === puntos.length"
+              [class.row-incomplete]="presenciaTotal(fila) > 0 && presenciaTotal(fila) < puntos.length"
+              [class.row-absent]="presenciaTotal(fila) === 0"
+            >
+              <td class="row-num">{{ i + 1 }}</td>
+              <td>
+                <span class="modelo-text" [class.modelo-unknown]="fila.modelo === 'DESCONOCIDO'">
+                  {{ fila.modelo }}
+                </span>
+              </td>
+              <td>
+                <span class="serial-badge">{{ fila.serial }}</span>
+              </td>
+              <td>
+                <code class="epc-code">{{ fila.epc }}</code>
+              </td>
+              <td *ngFor="let p of puntos" class="text-center">
+                <span
+                  class="status-dot"
+                  [class.is-present]="fila.presencia[p]"
+                  [class.is-absent]="!fila.presencia[p]"
+                  [title]="fila.presencia[p] ? 'Detectado en ' + p : 'No detectado en ' + p"
+                >
+                  {{ fila.presencia[p] ? '✓' : '✗' }}
+                </span>
+              </td>
+              <td class="text-center">
+                <div class="progress-wrap">
+                  <div class="progress-mini">
+                    <div
+                      class="progress-fill"
+                      [style.width.%]="(presenciaTotal(fila) / puntos.length) * 100"
+                      [class.fill-complete]="presenciaTotal(fila) === puntos.length"
+                    ></div>
+                  </div>
+                  <span class="progress-label">{{ presenciaTotal(fila) }}/{{ puntos.length }}</span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </section>
+
+  </div>
+</div>
