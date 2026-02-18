@@ -1,14 +1,14 @@
 import { Component, OnInit, ViewChild, ElementRef, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { Router} from '@angular/router';
 import { Escaneo, SavedConfig } from '../../interfaces/rfid.models';
 import { TrazabilidadService } from '../../services/trazabilidad.service';
 
 @Component({
   selector: 'app-operario',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule],
   templateUrl: './operario.html',
   styleUrl: './operario.css'
 })

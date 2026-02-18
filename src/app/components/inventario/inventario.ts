@@ -1,43 +1,42 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { TrazabilidadService } from '../../services/trazabilidad.service';
-import { SavedConfig, Escaneo, ModeloResumen } from '../../interfaces/rfid.models';
+import { SavedConfig } from '../../interfaces/rfid.models';
 
-interface PuntoConDatos {
-  id: number;
-  nombre: string;
-  chips: string[];  // EPCs únicos
-  totalLecturas: number;
+interface FilaComparativa {
+  epc: string;
+  modelo: string;
+  presencia: Record<string, boolean>;
 }
 
 @Component({
   selector: 'app-inventario',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule],
   templateUrl: './inventario.html',
   styleUrl: './inventario.css'
 })
 export class InventarioComponent implements OnInit {
 
-  // ── LÍNEA ACTIVA ──
   lineaActiva: SavedConfig | null = null;
-  puntos: PuntoConDatos[] = [];
-  puntoActualIdx: number = 0;
+  puntos: string[] = [];
 
-  // ── CATÁLOGO (común para todos los puntos) ──
+  // Catálogo maestro
   catalogo: { prefijo: string; nombre: string }[] = [];
-  archivoCatalogoNombre: string = '';
+  catalogoNombre: string = '';
 
-  // ── CSV TEMPORAL ──
-  archivoCSVNombre: string = '';
-  chipsTempCSV: string[] = [];
+  // CSVs cargados por punto
+  epcsPorPunto: Record<string, string[]> = {};
+  csvNombres: Record<string, string> = {};
 
-  // ── COMPARATIVA ──
-  mostrarComparativa: boolean = false;
-  perdidas: { punto: string; chips: string[] }[] = [];
-  apariciones: { punto: string; chips: string[] }[] = [];
+  // Tabla resultado
+  filas: FilaComparativa[] = [];
+  tablaGenerada: boolean = false;
+
+  // Filtro
+  filtroTexto: string = '';
 
   constructor(
     private router: Router,
@@ -47,196 +46,125 @@ export class InventarioComponent implements OnInit {
 
   ngOnInit(): void {
     this.lineaActiva = this.trazabilidadService.getActiveConfig();
-    
     if (!this.lineaActiva) {
-      alert('No hay línea activa. Ve a Configuración primero.');
       this.router.navigate(['/configuracion']);
       return;
     }
-
-    // Inicializar puntos cargando lo que ya hay en el servicio (localStorage)
-    this.puntos = this.lineaActiva.locations.map((nombre, id) => {
-      const escaneos = this.trazabilidadService.getScansForPoint(this.lineaActiva!.id, nombre);
-      const chipsUnicos = Array.from(new Set(escaneos.map(e => e.chipId)));
-      
-      return {
-        id,
-        nombre,
-        chips: chipsUnicos,
-        totalLecturas: escaneos.length
-      };
+    this.puntos = this.lineaActiva.locations;
+    this.puntos.forEach(p => {
+      this.epcsPorPunto[p] = [];
+      this.csvNombres[p] = '';
     });
   }
 
-  get puntoActual(): PuntoConDatos {
-    return this.puntos[this.puntoActualIdx];
-  }
-
-  irAPunto(idx: number): void {
-    this.puntoActualIdx = idx;
-    this.archivoCSVNombre = '';
-    this.chipsTempCSV = [];
-    this.mostrarComparativa = false;
-    this.cdr.detectChanges();
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // GESTIÓN DE CATÁLOGO
-  // ══════════════════════════════════════════════════════════════
-
+  // ── CATÁLOGO ──
   onCatalogoSelected(e: Event): void {
     const file = (e.target as HTMLInputElement).files?.[0];
     if (!file) return;
-
-    this.archivoCatalogoNombre = file.name;
+    this.catalogoNombre = file.name;
     const reader = new FileReader();
     reader.onload = (ev) => {
       const text = ev.target?.result as string;
-      this.catalogo = this.parsearCatalogo(text);
+      this.catalogo = text.split('\n')
+        .map(linea => {
+          const cols = linea.split(/[,;\t]/).map(c => c.replace(/['"]+/g, '').trim());
+          return { prefijo: cols[0]?.toUpperCase(), nombre: cols[1] };
+        })
+        .filter(c => c.prefijo && c.prefijo.length > 3 && c.prefijo !== 'EPC' && !!c.nombre);
+      this.tablaGenerada = false;
       this.cdr.detectChanges();
     };
     reader.readAsText(file, 'utf-8');
   }
 
-  private parsearCatalogo(text: string): { prefijo: string; nombre: string }[] {
-    const lineas = text.split(/\r?\n/).filter(l => l.trim());
-    const resultado: { prefijo: string; nombre: string }[] = [];
-
-    for (const linea of lineas) {
-      const cols = linea.split(/[,;\t]/).map(c => c.replace(/['"]+/g, '').trim());
-      const prefijo = cols[0]?.toUpperCase();
-      const nombre = cols[1];
-
-      if (prefijo && prefijo !== 'EPC' && nombre) {
-        resultado.push({ prefijo, nombre });
-      }
-    }
-    return resultado;
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // GESTIÓN DE CSV POR PUNTO
-  // ══════════════════════════════════════════════════════════════
-
-  onCSVSelected(e: Event): void {
+  // ── CSV POR PUNTO ──
+  onCSVPuntoSelected(e: Event, punto: string): void {
     const file = (e.target as HTMLInputElement).files?.[0];
     if (!file) return;
-
-    this.archivoCSVNombre = file.name;
+    this.csvNombres[punto] = file.name;
     const reader = new FileReader();
     reader.onload = (ev) => {
       const text = ev.target?.result as string;
-      this.chipsTempCSV = this.parsearCSV(text);
+      const epcs = Array.from(new Set(
+        text.split('\n')
+          .map(l => l.split(/[,;\t]/)[0].replace(/['"]+/g, '').trim().toUpperCase())
+          .filter(epc => epc.length >= 6 && epc !== 'EPC')
+      ));
+      this.epcsPorPunto[punto] = epcs;
+      this.tablaGenerada = false;
       this.cdr.detectChanges();
     };
     reader.readAsText(file, 'utf-8');
   }
 
-  private parsearCSV(text: string): string[] {
-    const lineas = text.split(/\r?\n/).filter(l => l.trim());
-    const chips: string[] = [];
-
-    for (const linea of lineas) {
-      const cols = linea.split(/[,;\t]/).map(c => c.replace(/['"]+/g, '').trim());
-      const epc = cols[0];
-      if (epc && epc.toUpperCase() !== 'EPC' && epc.length >= 6) {
-        chips.push(epc);
-      }
-    }
-    return Array.from(new Set(chips));
+  // ── IDENTIFICAR MODELO ──
+  identificarModelo(epc: string): string | null {
+    const match = this.catalogo.find(c => epc.startsWith(c.prefijo));
+    return match ? match.nombre : null;
   }
 
-  guardarEnPunto(): void {
-    if (!this.chipsTempCSV.length || !this.lineaActiva) return;
+  // ── GENERAR TABLA ──
+  generarTabla(): void {
+    // Recolectar todos los EPCs únicos de todos los puntos
+    const todosEpcs = new Set<string>();
+    this.puntos.forEach(p => {
+      (this.epcsPorPunto[p] || []).forEach(epc => todosEpcs.add(epc));
+    });
 
-    const escaneos: Escaneo[] = this.chipsTempCSV.map(chipId => ({
-      id: Date.now().toString() + Math.random().toString(36).substr(2, 4),
-      chipId,
-      puntoNombre: this.puntoActual.nombre,
-      timestamp: new Date().toISOString()
-    }));
+    // Construir filas solo para EPCs reconocidos en el catálogo
+    const filasMap = new Map<string, FilaComparativa>();
 
-    // Reemplazar datos antiguos en el servicio
-    this.trazabilidadService.clearPointScans(this.lineaActiva.id, this.puntoActual.nombre);
-    this.trazabilidadService.addBulkScans(this.lineaActiva.id, this.puntoActual.nombre, escaneos);
+    todosEpcs.forEach(epc => {
+      const modelo = this.identificarModelo(epc);
+      if (!modelo) return; // ignorar ruido
 
-    // Actualizar modelo local
-    this.puntoActual.chips = [...this.chipsTempCSV];
-    this.puntoActual.totalLecturas = this.chipsTempCSV.length;
+      const presencia: Record<string, boolean> = {};
+      this.puntos.forEach(p => {
+        presencia[p] = (this.epcsPorPunto[p] || []).includes(epc);
+      });
 
-    // Limpiar UI temporal
-    this.chipsTempCSV = [];
-    this.archivoCSVNombre = '';
+      filasMap.set(epc, { epc, modelo, presencia });
+    });
 
-    alert(`✅ Datos guardados correctamente en ${this.puntoActual.nombre}`);
+    // Ordenar por modelo
+    this.filas = Array.from(filasMap.values())
+      .sort((a, b) => a.modelo.localeCompare(b.modelo));
+
+    this.tablaGenerada = true;
     this.cdr.detectChanges();
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // COMPARATIVA
-  // ══════════════════════════════════════════════════════════════
-
-  generarComparativa(): void {
-    this.perdidas = [];
-    this.apariciones = [];
-
-    for (let i = 1; i < this.puntos.length; i++) {
-      const anterior = this.puntos[i - 1];
-      const actual = this.puntos[i];
-
-      const perdidos = anterior.chips.filter(c => !actual.chips.includes(c));
-      if (perdidos.length > 0) {
-        this.perdidas.push({ punto: `${anterior.nombre} → ${actual.nombre}`, chips: perdidos });
-      }
-
-      const nuevos = actual.chips.filter(c => !anterior.chips.includes(c));
-      if (nuevos.length > 0) {
-        this.apariciones.push({ punto: `${anterior.nombre} → ${actual.nombre}`, chips: nuevos });
-      }
-    }
-
-    this.mostrarComparativa = true;
-    this.cdr.detectChanges();
+  // ── FILTRO ──
+  get filasFiltradas(): FilaComparativa[] {
+    if (!this.filtroTexto.trim()) return this.filas;
+    const f = this.filtroTexto.toLowerCase();
+    return this.filas.filter(r =>
+      r.modelo.toLowerCase().includes(f) || r.epc.toLowerCase().includes(f)
+    );
   }
 
-  identificarModelo(epc: string): string {
-    if (!this.catalogo.length) return 'Sin Catálogo';
-    const match = this.catalogo.find(c => epc.toUpperCase().startsWith(c.prefijo));
-    return match ? match.nombre : 'Desconocido';
+  // ── STATS ──
+  get totalArticulos(): number { return this.filas.length; }
+
+  get articulosCompletos(): number {
+    return this.filas.filter(f => this.puntos.every(p => f.presencia[p])).length;
   }
 
-  get resumenModelos(): ModeloResumen[] {
-    if (!this.puntoActual.chips.length) return [];
-
-    const mapa = new Map<string, number>();
-    for (const chip of this.puntoActual.chips) {
-      const modelo = this.identificarModelo(chip);
-      mapa.set(modelo, (mapa.get(modelo) || 0) + 1);
-    }
-
-    return Array.from(mapa.entries())
-      .map(([nombre, cantidad]) => ({ nombre, cantidad }))
-      .sort((a, b) => b.cantidad - a.cantidad);
+  get articulosConPerdida(): number {
+    return this.filas.filter(f => !this.puntos.every(p => f.presencia[p])).length;
   }
 
-  get totalChipsLinea(): number {
-    // Suma de chips únicos en toda la línea (sin duplicados globales)
-    const todos = new Set<string>();
-    this.puntos.forEach(p => p.chips.forEach(c => todos.add(c)));
-    return todos.size;
+  get todosCSVCargados(): boolean {
+    return this.puntos.length > 0 && this.puntos.every(p => this.epcsPorPunto[p]?.length > 0);
   }
 
-// --- GETTERS PARA CÁLCULOS ---
-  get totalPerdidasCount(): number {
-    return this.perdidas.reduce((sum, p) => sum + p.chips.length, 0);
+  get puntosConCSV(): number {
+    return this.puntos.filter(p => this.epcsPorPunto[p]?.length > 0).length;
   }
 
-  get totalAparicionesCount(): number {
-    return this.apariciones.reduce((sum, a) => sum + a.chips.length, 0);
+  presenciaTotal(fila: FilaComparativa): number {
+    return this.puntos.filter(p => fila.presencia[p]).length;
   }
 
-
-  volver(): void {
-    this.router.navigate(['/configuracion']);
-  }
+  volver(): void { this.router.navigate(['/configuracion']); }
 }
