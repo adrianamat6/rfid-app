@@ -1,11 +1,10 @@
 <div class="inv-root">
 
-  <!-- TOPBAR -->
   <header class="inv-topbar">
     <div class="inv-topbar-left">
       <button class="btn-back" (click)="volver()">←</button>
       <div class="inv-title-block">
-        <span class="inv-label">INVENTARIO</span>
+        <span class="inv-label">AUDITORÍA UNITARIA · CHIP A CHIP</span>
         <h1 class="inv-title">{{ lineaActiva?.name || 'Sin línea' }}</h1>
       </div>
     </div>
@@ -20,92 +19,82 @@
 
   <div class="inv-body">
 
-    <!-- ══ PASO 1: CATÁLOGO ══ -->
+    <!-- PASO 1: Catálogo -->
     <section class="inv-section">
       <div class="section-head">
         <div class="step-badge">01</div>
         <div>
           <div class="section-title">Catálogo Maestro</div>
-          <div class="section-sub">Archivo CSV con columnas: EPC prefijo, Nombre modelo</div>
+          <div class="section-sub">Prefijos EPC → nombres de modelo (el serial se extrae automáticamente)</div>
         </div>
         <div class="section-status" [class.done]="catalogo.length > 0">
-          {{ catalogo.length > 0 ? '✓ ' + catalogo.length + ' modelos cargados' : 'Pendiente' }}
+          {{ catalogo.length > 0 ? '✓ ' + catalogo.length + ' modelos' : 'Esperando archivo...' }}
         </div>
       </div>
       <div class="upload-row">
         <label class="upload-btn" [class.loaded]="catalogo.length > 0">
           <input type="file" accept=".csv,.txt" (change)="onCatalogoSelected($event)" hidden>
-          <span class="upload-icon">{{ catalogo.length > 0 ? '📗' : '📂' }}</span>
-          <span>{{ catalogoNombre || 'Seleccionar catálogo maestro' }}</span>
+          <span>{{ catalogoNombre || '📂 Cargar Catálogo .csv' }}</span>
         </label>
       </div>
     </section>
 
-    <!-- ══ PASO 2: CSVs POR PUNTO ══ -->
+    <!-- PASO 2: Lecturas por punto -->
     <section class="inv-section">
       <div class="section-head">
         <div class="step-badge">02</div>
         <div>
-          <div class="section-title">Lecturas por Punto</div>
-          <div class="section-sub">Sube el CSV de cada punto de control</div>
-        </div>
-        <div class="section-status" [class.done]="todosCSVCargados">
-          {{ puntosConCSV }}/{{ puntos.length }} puntos cargados
+          <div class="section-title">Lecturas de Puntos de Control</div>
+          <div class="section-sub">Cada línea del CSV = 1 chip físico único detectado en ese punto</div>
         </div>
       </div>
-
       <div class="puntos-upload-grid">
-        <div class="punto-upload-card" *ngFor="let p of puntos; let i = index"
-             [class.loaded]="(epcsPorPunto[p]?.length ?? 0) > 0">
+        <div class="punto-upload-card" *ngFor="let p of puntos" [class.loaded]="(epcsPorPunto[p]?.length ?? 0) > 0">
           <div class="punto-upload-header">
-            <span class="punto-idx-badge">P-{{ (i+1).toString().padStart(2,'0') }}</span>
             <span class="punto-upload-name">{{ p }}</span>
             <span class="punto-count" *ngIf="(epcsPorPunto[p]?.length ?? 0) > 0">
-              {{ epcsPorPunto[p].length }} EPCs
+              {{ epcsPorPunto[p].length }} chips
             </span>
           </div>
           <label class="punto-upload-btn">
             <input type="file" accept=".csv,.txt" (change)="onCSVPuntoSelected($event, p)" hidden>
-            <span>{{ csvNombres[p] || '+ Subir CSV de ' + p }}</span>
+            <span>{{ csvNombres[p] || '+ Cargar CSV' }}</span>
           </label>
         </div>
       </div>
     </section>
 
-    <!-- ══ PASO 3: GENERAR ══ -->
-    <section class="inv-section inv-action-section" *ngIf="catalogo.length > 0 && puntosConCSV > 0">
+    <!-- ACCIÓN -->
+    <div class="action-bar" *ngIf="puntosConCSV > 0">
       <button class="btn-generar" (click)="generarTabla()">
-        <span>⚡</span>
-        GENERAR COMPARATIVA
+        ⚡ GENERAR AUDITORÍA UNITARIA
       </button>
-      <span class="action-hint" *ngIf="!todosCSVCargados">
-        Faltan {{ puntos.length - puntosConCSV }} punto(s) por cargar — puedes generar igualmente
-      </span>
-    </section>
+    </div>
 
-    <!-- ══ TABLA COMPARATIVA ══ -->
-    <section class="inv-section tabla-section" *ngIf="tablaGenerada">
+    <!-- TABLA RESULTADO -->
+    <section class="inv-section" *ngIf="tablaGenerada">
 
-      <!-- Resumen stats -->
+      <!-- Stats -->
       <div class="stats-bar">
         <div class="stat-chip total">
-          <span class="stat-n">{{ totalArticulos }}</span>
-          <span class="stat-lbl">Artículos</span>
+          <b>{{ totalArticulos }}</b> Unidades físicas
         </div>
         <div class="stat-chip ok">
-          <span class="stat-n">{{ articulosCompletos }}</span>
-          <span class="stat-lbl">Completos</span>
+          <b>{{ articulosCompletos }}</b> Completaron el recorrido
         </div>
-        <div class="stat-chip warn">
-          <span class="stat-n">{{ articulosConPerdida }}</span>
-          <span class="stat-lbl">Con pérdida</span>
+        <div class="stat-chip warn" *ngIf="articulosParciales > 0">
+          <b>{{ articulosParciales }}</b> Recorrido incompleto
         </div>
       </div>
 
       <!-- Filtro -->
       <div class="tabla-toolbar">
-        <input class="filtro-input" type="text" placeholder="🔍  Buscar modelo o EPC..."
-               [(ngModel)]="filtroTexto">
+        <input
+          class="filtro-input"
+          type="text"
+          placeholder="🔍 Filtrar por modelo, serial o EPC completo..."
+          [(ngModel)]="filtroTexto"
+        >
         <span class="filtro-count">{{ filasFiltradas.length }} resultados</span>
       </div>
 
@@ -114,54 +103,61 @@
         <table class="comp-table">
           <thead>
             <tr>
-              <th class="th-modelo">MODELO</th>
-              <th class="th-epc">EPC</th>
-              <th class="th-punto" *ngFor="let p of puntos">{{ p }}</th>
-              <th class="th-prog">PROGRESO</th>
+              <th>#</th>
+              <th>MODELO</th>
+              <th>SERIAL (Unidad)</th>
+              <th>EPC COMPLETO</th>
+              <th *ngFor="let p of puntos" class="text-center">{{ p }}</th>
+              <th class="text-center">RECORRIDO</th>
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let fila of filasFiltradas"
-                [class.row-completa]="presenciaTotal(fila) === puntos.length"
-                [class.row-perdida]="presenciaTotal(fila) < puntos.length">
-              <td class="td-modelo">
-                <span class="modelo-tag">{{ fila.modelo }}</span>
+            <tr
+              *ngFor="let fila of filasFiltradas; let i = index"
+              [class.row-complete]="presenciaTotal(fila) === puntos.length"
+              [class.row-incomplete]="presenciaTotal(fila) > 0 && presenciaTotal(fila) < puntos.length"
+              [class.row-absent]="presenciaTotal(fila) === 0"
+            >
+              <td class="row-num">{{ i + 1 }}</td>
+              <td>
+                <span class="modelo-text" [class.modelo-unknown]="fila.modelo === 'DESCONOCIDO'">
+                  {{ fila.modelo }}
+                </span>
               </td>
-              <td class="td-epc">
-                <code>{{ fila.epc }}</code>
+              <td>
+                <span class="serial-badge">{{ fila.serial }}</span>
               </td>
-              <td class="td-check" *ngFor="let p of puntos">
-                <span class="check-icon" [class.present]="fila.presencia[p]" [class.absent]="!fila.presencia[p]">
+              <td>
+                <code class="epc-code">{{ fila.epc }}</code>
+              </td>
+              <td *ngFor="let p of puntos" class="text-center">
+                <span
+                  class="status-dot"
+                  [class.is-present]="fila.presencia[p]"
+                  [class.is-absent]="!fila.presencia[p]"
+                  [title]="fila.presencia[p] ? 'Detectado en ' + p : 'No detectado en ' + p"
+                >
                   {{ fila.presencia[p] ? '✓' : '✗' }}
                 </span>
               </td>
-              <td class="td-prog">
-                <div class="mini-bar">
-                  <div class="mini-fill"
-                       [style.width.%]="(presenciaTotal(fila) / puntos.length) * 100"
-                       [class.fill-full]="presenciaTotal(fila) === puntos.length"
-                       [class.fill-partial]="presenciaTotal(fila) < puntos.length && presenciaTotal(fila) > 0"
-                       [class.fill-none]="presenciaTotal(fila) === 0">
+              <td class="text-center">
+                <div class="progress-wrap">
+                  <div class="progress-mini">
+                    <div
+                      class="progress-fill"
+                      [style.width.%]="(presenciaTotal(fila) / puntos.length) * 100"
+                      [class.fill-complete]="presenciaTotal(fila) === puntos.length"
+                    ></div>
                   </div>
+                  <span class="progress-label">{{ presenciaTotal(fila) }}/{{ puntos.length }}</span>
                 </div>
-                <span class="mini-label">{{ presenciaTotal(fila) }}/{{ puntos.length }}</span>
               </td>
             </tr>
           </tbody>
         </table>
-
-        <div class="tabla-empty" *ngIf="filasFiltradas.length === 0">
-          <span>Sin resultados para "{{ filtroTexto }}"</span>
-        </div>
       </div>
-    </section>
 
-    <!-- Estado vacío inicial -->
-    <div class="empty-start" *ngIf="!tablaGenerada && catalogo.length === 0">
-      <div class="empty-icon-big">📦</div>
-      <p>Empieza cargando el catálogo maestro</p>
-      <span>Después sube los CSVs de cada punto y genera la comparativa</span>
-    </div>
+    </section>
 
   </div>
 </div>
